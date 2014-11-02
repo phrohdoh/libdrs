@@ -1,0 +1,7 @@
+*.exe
+*.mdb
+*.userprefs
+*.drs
+libdrs/obj
+libdrs/bin
+
