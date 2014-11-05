@@ -4,4 +4,5 @@
 *.drs
 libdrs/obj
 libdrs/bin
+output
 

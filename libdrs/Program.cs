@@ -33,9 +33,13 @@ namespace libdrs
 
 			var tableOffsets = new int[4];
 			var filesInTable = new int[4];
+			var typePerTable = new string[4];
+
+			if (!Directory.Exists("output"))
+				Directory.CreateDirectory("output");
 
 			// Starting to read table headers now
-			for (var i = 0; i < 4; i++)
+			for (var i = 0; i < numTables; i++)
 			{
 				Console.WriteLine();
 				Console.WriteLine("Table {0}:", i + 1);
@@ -44,8 +48,9 @@ namespace libdrs
 				if (!string.IsNullOrWhiteSpace(filetype))
 					Console.WriteLine("Filetype: {0}", filetype);
 
-				var rExt = s.ReadASCII(3);
-				Console.WriteLine("Extension: {0} ({1})", rExt, rExt.Reversed());
+				var ext = s.ReadASCII(3).Reversed();
+				Console.WriteLine("Extension: {0} ({1})", ext, ext.Reversed());
+				typePerTable[i] = ".{0}".F(ext);
 
 				var tableOffset = s.ReadInt32();
 				Console.WriteLine("Table offset: {0}", tableOffset);
@@ -56,7 +61,7 @@ namespace libdrs
 				filesInTable[i] = numberOfFiles;
 			}
 
-			for (var i = 0; i < 4; i++)
+			for (var i = 0; i < numTables; i++)
 			{
 				Console.WriteLine();
 
@@ -66,12 +71,18 @@ namespace libdrs
 				Console.WriteLine("Table {0}'s position: {1}", i + 1, s.Position);
 				Console.WriteLine("Files in table {0}: {1}", i + 1, filesInTable[i]);
 
+				var lastPos = 0L;
+
 				// Read the actual files
 				for (var file = 0; file < filesInTable[i]; file++)
 				{
-					Console.WriteLine();
+					if (lastPos != 0)
+					{
+						Console.WriteLine("Going to lastPos at {0}", lastPos);
+						s.Position = lastPos;
+					}
 
-					var fileID = BitConverter.ToInt32(s.ReadBytes(4), 0);
+					var fileID = s.ReadInt32();
 					Console.WriteLine("\tFile ID: {0}", fileID);
 					
 					var fileOffset = s.ReadInt32();
@@ -80,15 +91,21 @@ namespace libdrs
 					var fileLength = s.ReadInt32();
 					Console.WriteLine("\tFile Length (bytes): {0}", fileLength);
 
+					lastPos = s.Position;
 					Console.WriteLine("\tSeeking to {0}", fileOffset);
 					s.Position = (long)fileOffset;
-					File.WriteAllBytes(fileID.ToString(), s.ReadBytes(fileLength));
+
+					var output = "{0}/{1}{2}".F("output", fileID.ToString(), typePerTable[i]);
+
+					File.WriteAllBytes(output, s.ReadBytes(fileLength));
 
 					Console.WriteLine("\tWrote {0} ({1})", fileID, file);
 
-					Console.WriteLine("\tGoing to table header @ {0}", tableOffsets[i]);
-					s.Position = (long)tableOffsets[i];
+					Console.WriteLine("\tEnd of file {0} at {1}", fileID, s.Position);
 				}
+
+				Console.WriteLine("\tGoing to table header @ {0}", tableOffsets[i]);
+				s.Position = (long)tableOffsets[i];
 			}
 		}
 	}
