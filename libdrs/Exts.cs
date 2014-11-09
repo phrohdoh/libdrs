@@ -13,6 +13,11 @@ namespace libdrs
 			return string.Format(fmt, args);
 		}
 
+		public static string GetString(this byte[] b)
+		{
+			return Encoding.UTF8.GetString(b);
+		}
+
 		public static string Reversed(this string s)
 		{
 			var arr = s.ToCharArray();

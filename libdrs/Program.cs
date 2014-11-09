@@ -1,111 +1,150 @@
 ﻿using System;
 using System.IO;
+using System.Collections.Generic;
 
 namespace libdrs
 {
 	class MainClass
 	{
-		static FileStream s;
-
 		public static void Main(string[] args)
 		{
 			if (args.Length < 1)
+			{
+				Console.WriteLine("No paramaters given!");
 				return;
-
-			s = new FileStream(args[0], FileMode.Open, FileAccess.Read);
-
-			var copyright = s.ReadASCII(36);
-			s.ReadBytes(4); // \032.
-			Console.WriteLine("Copyright: {0}", copyright.Replace('\0', '0'));
-
-			var version = s.ReadASCII(4);
-			Console.WriteLine(version);
-
-			var tribe = s.ReadASCII(12);
-			Console.WriteLine("{0}", tribe.Replace('\0', '0'));
-
-			var numTables = s.ReadInt32();
-			Console.WriteLine("Number of tables: {0}", numTables);
-
-			var firstFileOffset = s.ReadInt32();
-
-			Console.WriteLine("Position should be 64: {0}", s.Position);
-
-			var tableOffsets = new int[4];
-			var filesInTable = new int[4];
-			var typePerTable = new string[4];
+			}
 
 			if (!Directory.Exists("output"))
 				Directory.CreateDirectory("output");
 
-			// Starting to read table headers now
-			for (var i = 0; i < numTables; i++)
+			var inputFile = args[0];
+
+			if (inputFile.EndsWith(".drs"))
+				new DrsFile(inputFile);
+			else
+				Console.WriteLine("Filetype unsupported.");
+		}
+	}
+
+	public class DrsFile
+	{
+		public string Name { get; private set; }
+
+		readonly Dictionary<string, DrsEmbeddedFile> files = new Dictionary<string, DrsEmbeddedFile>();
+		readonly Stream s;
+
+		public DrsFile(string filename)
+		{
+			Name = filename;
+
+			s = new FileStream(filename, FileMode.Open, FileAccess.Read);
+
+			var header = new DrsHeader(s, Name);
+			if (header.TableCount < 1)
+				throw new InvalidOperationException("Bogus header in {0}.".F(filename));
+
+			var tables = new DrsTable[header.TableCount];
+
+			// Table headers are sequential.
+			// They are not like so: [header][data], [header][data]
+			// Instead they are: [header][header], [data][data]
+			// So we read all of the header info before diving into data.
+			for (var t = 0; t < tables.Length; t++)
+				tables[t] = new DrsTable(s);
+
+			foreach (var t in tables)
 			{
-				Console.WriteLine();
-				Console.WriteLine("Table {0}:", i + 1);
-
-				var filetype = s.ReadASCII(1);
-				if (!string.IsNullOrWhiteSpace(filetype))
-					Console.WriteLine("Filetype: {0}", filetype);
-
-				var ext = s.ReadASCII(3).Reversed();
-				Console.WriteLine("Extension: {0} ({1})", ext, ext.Reversed());
-				typePerTable[i] = ".{0}".F(ext);
-
-				var tableOffset = s.ReadInt32();
-				Console.WriteLine("Table offset: {0}", tableOffset);
-				tableOffsets[i] = tableOffset;
-
-				var numberOfFiles = s.ReadInt32();
-				Console.WriteLine("Number of files: {0}", numberOfFiles);
-				filesInTable[i] = numberOfFiles;
+				s.Position = t.Offset;
+				for (var f = 0; f < t.FileCount; f++)
+				{
+					var ef = new DrsEmbeddedFile(s, t);
+					if (!files.ContainsKey(ef.GeneratedFilename))
+						files.Add(ef.GeneratedFilename, ef);
+				}
 			}
 
-			for (var i = 0; i < numTables; i++)
+			foreach (var file in files.Values)
 			{
-				Console.WriteLine();
+				var output = "output/{0}".F(file.GeneratedFilename);
+				File.WriteAllBytes(output, file.GetData());
+			}
+		}
 
-				// Seek to the actual table
-				s.Position = (long)tableOffsets[i];
+		public byte[] GetData(string filename)
+		{
+			if (!files.ContainsKey(filename))
+				throw new KeyNotFoundException("Embedded file `{0}` does not exist.".F(filename));
 
-				Console.WriteLine("Table {0}'s position: {1}", i + 1, s.Position);
-				Console.WriteLine("Files in table {0}: {1}", i + 1, filesInTable[i]);
+			return files[filename].GetData();
+		}
 
-				var lastPos = 0L;
+		class DrsHeader
+		{
+			public readonly string CopyrightInfo;
+			public readonly string Version;
+			public readonly string ArchiveType;
+			public readonly int TableCount;
+			public readonly int FirstFileOffset;
 
-				// Read the actual files
-				for (var file = 0; file < filesInTable[i]; file++)
-				{
-					if (lastPos != 0)
-					{
-						Console.WriteLine("Going to lastPos at {0}", lastPos);
-						s.Position = lastPos;
-					}
+			public DrsHeader(Stream s, string name)
+			{
+				if (s.Position != 0)
+					throw new InvalidOperationException("Trying to read DRS header from somewhere other than the beginning of the archive.");
 
-					var fileID = s.ReadInt32();
-					Console.WriteLine("\tFile ID: {0}", fileID);
-					
-					var fileOffset = s.ReadInt32();
-					Console.WriteLine("\tFile Offset: {0}", fileOffset);
+				CopyrightInfo = s.ReadASCII(40);
+				Version = s.ReadASCII(4);
+				ArchiveType = s.ReadASCII(12);
+				if (ArchiveType != "tribe\0\0\0\0\0\0\0")
+					throw new InvalidOperationException("Archive `{0}` is not a valid `tribe` archive.".F(name));
 
-					var fileLength = s.ReadInt32();
-					Console.WriteLine("\tFile Length (bytes): {0}", fileLength);
+				TableCount = s.ReadInt32();
+				FirstFileOffset = s.ReadInt32();
+			}
+		}
 
-					lastPos = s.Position;
-					Console.WriteLine("\tSeeking to {0}", fileOffset);
-					s.Position = (long)fileOffset;
+		class DrsTable
+		{
+			public readonly string FileType;
+			public readonly string Extension;
+			public readonly int Offset;
+			public readonly int FileCount;
 
-					var output = "{0}/{1}{2}".F("output", fileID.ToString(), typePerTable[i]);
+			public DrsTable(Stream s)
+			{
+				FileType = s.ReadASCII(1);
+				Extension = s.ReadASCII(3).Reversed();
+				Offset = s.ReadInt32();
+				FileCount = s.ReadInt32();
+			}
+		}
 
-					File.WriteAllBytes(output, s.ReadBytes(fileLength));
+		class DrsEmbeddedFile
+		{
+			public readonly int FileID;
+			public readonly int Offset;
+			public readonly int Length;
+			public readonly string GeneratedFilename;
 
-					Console.WriteLine("\tWrote {0} ({1})", fileID, file);
+			Stream s;
 
-					Console.WriteLine("\tEnd of file {0} at {1}", fileID, s.Position);
-				}
+			public DrsEmbeddedFile(Stream s, DrsTable t)
+			{
+				this.s = s;
 
-				Console.WriteLine("\tGoing to table header @ {0}", tableOffsets[i]);
-				s.Position = (long)tableOffsets[i];
+				if (s.Length - s.Position < 12)
+					throw new InvalidOperationException("Going to read past end of stream. Something went wrong reading this DRS archive.");
+
+				FileID = s.ReadInt32();
+				Offset = s.ReadInt32();
+				Length = s.ReadInt32();
+
+				GeneratedFilename = "{0}.{1}".F(FileID.ToString(), t.Extension);
+			}
+
+			public byte[] GetData()
+			{
+				s.Position = Offset;
+				return s.ReadBytes(Length);
 			}
 		}
 	}
