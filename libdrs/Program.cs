@@ -22,6 +22,7 @@ namespace libdrs
 			switch (ext)
 			{
 				case "drs": new DrsFile(inputFile); break;
+				case "slp": new SlpFile(inputFile); break;
 				default: Console.WriteLine("Filetype `{0}` is not supported.", ext); break;
 			}
 		}
