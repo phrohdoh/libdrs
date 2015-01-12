@@ -3,7 +3,7 @@
 *.mdb
 *.userprefs
 *.drs
-libdrs/obj
-libdrs/bin
+**/obj
+**/bin
 output
 StyleCop*
