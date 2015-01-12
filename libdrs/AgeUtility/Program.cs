@@ -1,7 +1,8 @@
 ﻿using System;
 using System.IO;
+using libdrs;
 
-namespace libdrs
+namespace AgeUtility
 {
 	class MainClass
 	{
@@ -9,7 +10,7 @@ namespace libdrs
 		{
 			if (args.Length < 1)
 			{
-				Console.WriteLine("No paramaters given!");
+				Console.WriteLine("Need 1 file as a parameter.");
 				return;
 			}
 

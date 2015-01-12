@@ -1,8 +1,9 @@
 *.exe
+*.dll
 *.mdb
 *.userprefs
 *.drs
 libdrs/obj
 libdrs/bin
 output
-
+StyleCop*

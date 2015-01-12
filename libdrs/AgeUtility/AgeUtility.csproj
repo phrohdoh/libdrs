@@ -3,16 +3,16 @@
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">x86</Platform>
-    <ProjectGuid>{7F05E2DC-62A0-4D2E-B2A2-47FC45A599CC}</ProjectGuid>
-    <OutputType>Library</OutputType>
-    <RootNamespace>libdrs</RootNamespace>
-    <AssemblyName>libdrs</AssemblyName>
+    <ProjectGuid>{71230C96-86FC-453D-8CF1-7875FFF66C51}</ProjectGuid>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>AgeUtility</RootNamespace>
+    <AssemblyName>AgeUtility</AssemblyName>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|x86' ">
     <DebugSymbols>true</DebugSymbols>
     <DebugType>full</DebugType>
     <Optimize>false</Optimize>
-    <OutputPath>..</OutputPath>
+    <OutputPath>.</OutputPath>
     <DefineConstants>DEBUG;</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
@@ -22,7 +22,7 @@
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|x86' ">
     <DebugType>full</DebugType>
     <Optimize>true</Optimize>
-    <OutputPath>..</OutputPath>
+    <OutputPath>.</OutputPath>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
     <Externalconsole>true</Externalconsole>
@@ -32,10 +32,14 @@
     <Reference Include="System" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="Exts.cs" />
-    <Compile Include="DrsFile.cs" />
-    <Compile Include="SlpFile.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
+  <ItemGroup>
+    <ProjectReference Include="..\libdrs.csproj">
+      <Project>{7F05E2DC-62A0-4D2E-B2A2-47FC45A599CC}</Project>
+      <Name>libdrs</Name>
+    </ProjectReference>
+  </ItemGroup>
 </Project>
