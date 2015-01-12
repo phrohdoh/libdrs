@@ -1,5 +1,6 @@
 ﻿using System;
 using System.IO;
+using System.Linq;
 using System.Collections.Generic;
 
 namespace libdrs
@@ -18,16 +19,18 @@ namespace libdrs
 				throw new Exception(errorMessage);
 		}
 
-		public List<byte> ReadRowCommands(Stream stream, SlpFrame frame, SlpFrameRow row)
+		public byte[] PaletteFromRowCommands(Stream stream, SlpFrame frame, SlpFrameRow row)
 		{
-			var ret = new List<byte>();
-			for (var i = 0; i < frame.Width; i++)
-				ret.Add(0);
+			// Here we construct a list of palette indices
+			// So when we add to this collection we are just setting the index (hench the usage of byte)
+			var palette = new byte[frame.Width];
+
+			Console.WriteLine("{0}px in row {1}.", palette.Length, frame.Rows.IndexOf(row));
 
 			if (row.ShouldSkip)
 			{
 				stream.ReadBytes(1);
-				return ret;
+				return palette;
 			}
 
 			var command = DrawCommand.EndOfRow;
@@ -45,6 +48,8 @@ namespace libdrs
 				currentByte = stream.ReadBytes(1)[0];
 				command = CommandFromByte(currentByte);
 
+				Console.WriteLine("{0}\tof\t{1}:\t\t{2}", currentPixelPosition, frame.Width, command.ToString());
+
 				switch (command)
 				{
 					case DrawCommand.LesserBlockCopy:
@@ -54,7 +59,7 @@ namespace libdrs
 						commandLength = GetTop6BitsOf(currentByte);
 
 						for (var i = 0; i < commandLength; i++)
-							ret[currentPixelPosition++] = stream.ReadBytes(1)[0];
+							palette[currentPixelPosition++] = stream.ReadBytes(1)[0];
 
 						break;
 
@@ -70,7 +75,7 @@ namespace libdrs
 						commandLength = Get4BitsAndNext(currentByte, stream.ReadBytes(1)[0]);
 
 						for (var i = 0; i < commandLength; i++)
-							ret[currentPixelPosition++] = stream.ReadBytes(1)[0];
+							palette[currentPixelPosition++] = stream.ReadBytes(1)[0];
 
 						break;
 
@@ -81,6 +86,11 @@ namespace libdrs
 
 					case DrawCommand.PlayerColorCopy:
 						commandLength = GetTopNibbleOrNext(currentByte, stream);
+
+						var playerColor = (byte)(stream.ReadBytes(1)[0] + ((1 + 1) * 16)); // (playerIndex + 1)
+						for (var i = 0; i < commandLength; i++)
+							palette[currentPixelPosition++] = playerColor;
+
 						break;
 
 					case DrawCommand.FillColor:
@@ -88,28 +98,55 @@ namespace libdrs
 
 						var fillColor = stream.ReadBytes(1)[0];
 						for (var i = 0; i < commandLength; i++)
-							ret[currentPixelPosition++] = fillColor;
+							palette[currentPixelPosition++] = fillColor;
 
 						break;
 
 					case DrawCommand.FillPlayerColor:
 						commandLength = GetTopNibbleOrNext(currentByte, stream);
 
-						var playerColor = (byte)(stream.ReadBytes(1)[0] + ((1 + 1) * 16));
+						playerColor = (byte)(stream.ReadBytes(1)[0] + ((1 + 1) * 16)); // (playerIndex + 1)
 						for (var i = 0; i < commandLength; i++)
-							ret[currentPixelPosition++] = playerColor;
+							palette[currentPixelPosition++] = playerColor;
 
 						break;
 
-					case DrawCommand.ObscuredColor:
+				case DrawCommand.ObscuredColor: // aka Shadow
 						commandLength = GetTopNibbleOrNext(currentByte, stream);
+
 						for (var i = 0; i < commandLength; i++)
-							ret[currentPixelPosition++] = 56;
+							palette[currentPixelPosition++] = 56;
 
 						break;
 
 					case DrawCommand.ExtendedCommand:
-						Console.WriteLine("TODO");
+						var cmd = (DrawCommandExtended)currentByte;
+						switch (cmd)
+						{
+							case DrawCommandExtended.RenderHintFlipX:
+							case DrawCommandExtended.RenderHintNotFlipX:
+								Console.WriteLine("RenderHint X flips do not need to read more bytes.");
+								break;
+
+							case DrawCommandExtended.TableColorNormal:
+							case DrawCommandExtended.TableColorAlt:
+								Console.WriteLine("TableColor Normal/Alt does not need to read more bytes.");
+								break;
+
+							case DrawCommandExtended.PlayerOrTransparent:
+							case DrawCommandExtended.BlackOutline:
+								palette[currentPixelPosition++] = (byte)(cmd == DrawCommandExtended.PlayerOrTransparent ? 242 : 0);
+								break;
+
+							case DrawCommandExtended.OutlineSpan1:
+							case DrawCommandExtended.OutlineSpan2:
+								commandLength = stream.ReadBytes(1)[0];
+
+								for (var i = 0; i < commandLength; i++)
+									palette[currentPixelPosition++] = (byte)(cmd == DrawCommandExtended.OutlineSpan1 ? 242 : 0);
+
+								break;
+						}
 						break;
 
 					case DrawCommand.EndOfRow:
@@ -121,11 +158,12 @@ namespace libdrs
 						break;
 				}
 
+
 			} while (command != DrawCommand.EndOfRow);
 
-			Assert(currentPixelPosition + row.Right == (uint)frame.Width, "Current Pixel Position + Right skip != Frame's width!");
+			Assert(currentPixelPosition + row.Right == (uint)frame.Width, "Current Pixel Position + Right skip != Frame's width! (some pixel data was not read for this row)");
 
-			return ret;
+			return palette;
 		}
 
 		static DrawCommand CommandFromByte(byte b)
@@ -185,7 +223,7 @@ namespace libdrs
 					var row = frame.Rows[i];
 					Assert(stream.Position == row.RowDataOffset, "Invalid row data offset: {0} in frame {1}.".F(pos, currFrame));
 
-					row.PixelData = ReadRowCommands(stream, frame, row);
+					row.PixelData = PaletteFromRowCommands(stream, frame, row);
 				}
 
 				currFrame++;
@@ -261,7 +299,6 @@ namespace libdrs
 
 	enum DrawCommandExtended : byte
 	{
-		Invalid             = 0x00,
 		RenderHintFlipX     = 0x0E,
 		RenderHintNotFlipX  = 0x1E,
 		TableColorNormal    = 0x2E,
@@ -277,7 +314,7 @@ namespace libdrs
 		public ushort Left;
 		public ushort Right;
 		public uint RowDataOffset;
-		public List<byte> PixelData = new List<byte>();
+		public byte[] PixelData;
 
 		public bool ShouldSkip { get { return Left == empty; } }
 
