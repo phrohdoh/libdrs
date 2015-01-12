@@ -1,54 +1,55 @@
-Age of Empires DRS Archives
+Age of Empires DRS archive specification 1.01
 
 Files in a DRS archive do not have "names" in the typical sense.
-
 They have an ID and an extension.
-DRS Format
-Header
 
+DRS Format
+
+== Header ==
 The DRS header contains a copyright string, a version string,
 an archive type string, the number of embedded files,
 and the offset of the first embedded file from the start of the DRS archive.
 
-Total: 64 bytes
-Length 		C# Type 	Description
-40 bytes 	string 		Copyright Info
-4 bytes 	string 		File Version
-12 bytes 	string 		Archive Type
-4 bytes 	int 		Table Count
-4 bytes 	int 		1st File Offset
+Length      C# Type     Description
+40 bytes    string      Copyright Info
+4 bytes     string      Archive Version
+12 bytes    string      Archive Type
+4 bytes     int         Table Count
+4 bytes     int         1st File Offset
 
 Output for interfac.drs (from Age of Empires 1):
+
 Copyright (c) 1997 Ensemble Studios.
 1.00
 tribe
 4
 2212
-Note that after the tribe string there should be 7 "C String-Terminators" (\0).
-Table Headers
 
+== Table Headers ==
 Files are sorted by their file extension into 'tables'.
 This makes extracting specific file types easier since each table only contains a single file type.
 
 Table headers are laid out like so:
-Total: 12 bytes
-Length 		C# Type 	Description
-1 bytes 	string 		Related to file type
-3 bytes 	string 		Extension (reversed)
-4 bytes 	int 		Table Offset
-4 bytes 	int 		File Count
-Tables
+Length      C# Type     Description
+1 byte      string      Related to file type
+3 bytes     string      Extension (reversed)
+4 bytes     int         Table Offset
+4 bytes     int         File Count
 
+Table headers are sequential.
+They are not like so: [header][data][header][data]
+Instead they are:     [header][header][data][data]
+So read all of the header info before diving into data.
+
+== Tables ==
 At the start of each table is n groups of data related to the files in this table (where n is File Count).
 
-File Info
-Total: 12 bytes
-Length 		C# Type 	Description
-4 bytes 	int 		File ID
-4 bytes 	int 		File Offset
-4 bytes 	int 		Table Size
+Length      C# Type     Description
+4 bytes     int         File ID
+4 bytes     int         File Offset
+4 bytes     int         Table Size
 
-You can generate a psuedo-name for each file in the table you are currently iterating by doing (C#):
-string.Format("{0}.{1}", FileID.ToString(), currentTable.Extension);
+You can generate a psuedo-name for each file in the table you are currently iterating by doing:
+FileID + "." + currentTable.Extension
 
-Remember to reverse currentTable.Extension either when parsing it or when creating the psuedo-name.
+Be sure to reverse currentTable.Extension either when parsing it or when creating the psuedo-name.
